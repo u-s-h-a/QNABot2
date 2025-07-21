@@ -1,10 +1,13 @@
 from dotenv import load_dotenv
 import os
+import nltk
+nltk.data.path.append("./nltk_data")
+
 import streamlit as st
 import tempfile
 import shutil
 import requests
-# from google.oauth2.credentials import Credentials
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 load_dotenv()

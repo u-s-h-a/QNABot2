@@ -4,8 +4,19 @@ fastapi==0.111.0
 uvicorn==0.29.0
 python-dotenv==1.0.1
 
+
+google-auth-httplib2
+transformers
+torch
+
+
+streamlit
+requests
+python-dotenv
+google-api-python-client
 google-auth
 google-auth-oauthlib
-google-auth-httplib2
-google-api-python-client
-
+llama-index
+nltk
+sentence-transformers
+cohere
