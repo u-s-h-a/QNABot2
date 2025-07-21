@@ -20,3 +20,4 @@ llama-index
 nltk
 sentence-transformers
 cohere
+llama-index-llms-cohere
