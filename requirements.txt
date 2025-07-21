@@ -8,8 +8,8 @@ python-dotenv==1.0.1
 google-auth-httplib2
 transformers
 torch
-
-
+llama-index
+llama-index-embeddings-huggingface
 streamlit
 requests
 python-dotenv
