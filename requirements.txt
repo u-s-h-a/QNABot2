@@ -27,3 +27,7 @@ python-docx
 chardet
 pandas
 openpyxl
+
+PyPDF2
+docx2txt
+xlrd
