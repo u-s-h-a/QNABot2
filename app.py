@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import os
 import nltk
+nltk.download('punkt')
 nltk.data.path.append("./nltk_data")
 
 import streamlit as st
