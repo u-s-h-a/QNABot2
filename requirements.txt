@@ -21,3 +21,9 @@ nltk
 sentence-transformers>=2.2.2,<3.0.0
 cohere
 llama-index-llms-cohere
+
+pdfplumber
+python-docx
+chardet
+pandas
+openpyxl
