@@ -1,0 +1,174 @@
+hello my name is usha and i am 20 years old girl. 
+
+
+
+from dotenv import load_dotenv
+import os
+import streamlit as st
+import tempfile
+import shutil
+import requests
+
+load_dotenv()
+
+from llama_index.core import VectorStoreIndex, StorageContext, load_index_from_storage
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.llms.cohere import Cohere
+from llama_index.core import SimpleDirectoryReader
+
+FASTAPI_URL = "http://localhost:8000"
+
+def get_profile():
+    try:
+        resp = requests.get(f"{FASTAPI_URL}/profile")
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return None
+
+st.set_page_config(page_title="QnA Bot", page_icon="🤖")
+
+# Show a single title and description
+st.title("📄 QnA Bot")
+st.write("Welcome to the QnA bot! Upload your files and ask questions.")
+
+# --- UI Customization ---
+st.set_page_config(page_title="QnA Bot", page_icon="🤖", layout="wide")
+st.markdown(
+    """
+    <style>
+    .main {background-color: #f5f7fa;}
+    .st-bb {background-color: #fff !important;}
+    .st-cq {color: #2d3748;}
+    .stButton>button {background-color: #4f8cff; color: white;}
+    .css-1d391kg {background-color: #4f8cff;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown("""
+    <style>
+    /* Fix for Streamlit multiselect dropdown in dark mode */
+    div[data-baseweb="select"] > div {
+        background-color: #22223b !important;  /* dark background */
+        color: #fff !important;                /* white text */
+    }
+    /* Dropdown options */
+    div[data-baseweb="popover"] {
+        background-color: #22223b !important;
+        color: #fff !important;
+    }
+    /* Selected option chips */
+    .css-1n76uvr {
+        background-color: #4f8cff !important;
+        color: #fff !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- Sidebar Branding & Upload ---
+st.sidebar.image("https://em-content.zobj.net/source/microsoft-teams/363/robot_1f916.png", width=80)
+st.sidebar.title("QnA Bot")
+st.sidebar.markdown("Ask questions about your documents. Upload new files to update the knowledge base.")
+
+# --- Sidebar: Connect & Sync Sources ---
+# Remove the Connect & Sync Sources section from the sidebar
+# (Delete or comment out the following block)
+# st.sidebar.header("Connect & Sync Sources")
+# notion_token = st.sidebar.text_input("Notion Token", type="password", key="notion_token")
+# notion_db_id = st.sidebar.text_input("Notion Database/Page ID", key="notion_db_id")
+# google_service_file = st.sidebar.file_uploader("Google Service Account JSON", type="json", key="google_service_file")
+# google_doc_ids = st.sidebar.text_input("Google Doc IDs (comma-separated)", key="google_doc_ids")
+# confluence_url = st.sidebar.text_input("Confluence Base URL", key="confluence_url")
+# confluence_user = st.sidebar.text_input("Confluence Username", key="confluence_user")
+# confluence_token = st.sidebar.text_input("Confluence API Token", type="password", key="confluence_token")
+# confluence_space = st.sidebar.text_input("Confluence Space Key", key="confluence_space")
+# if st.sidebar.button("Sync Now"):
+#     ... (all sync logic)
+
+
+# --- File Upload ---
+uploaded_files = st.sidebar.file_uploader(
+    "Upload new documents (PDF, TXT, DOCX, etc.)",
+    type=["pdf", "txt", "docx"],
+    accept_multiple_files=True,
+    key="uploaded_files"
+)
+
+# Always show the Upload button
+if st.sidebar.button("Upload"):
+    st.session_state['files_processed'] = False
+    st.rerun()
+
+# Only process if not already processed in this session
+if uploaded_files and not st.session_state.get("files_processed", False):
+    with st.spinner("Processing and indexing new documents..."):
+        # Save uploaded files to a temp directory
+        temp_dir = tempfile.mkdtemp()
+        for uploaded_file in uploaded_files:
+            file_path = os.path.join(temp_dir, uploaded_file.name)
+            with open(file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+        # Index new documents (only use embedding model)
+        reader = SimpleDirectoryReader(input_dir=temp_dir)
+        docs = reader.load_data()
+        embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        index = VectorStoreIndex.from_documents(docs, embed_model=embed_model)
+        index.storage_context.persist(persist_dir="./storage")
+        shutil.rmtree(temp_dir)
+        st.session_state['files_processed'] = True
+        st.session_state['reindex'] = True
+        st.session_state["chat_history"] = []  # Clear chat history after new upload
+        st.success("Documents uploaded and indexed! You can now ask questions about them.")
+
+# --- Load index and models (after upload or on startup) ---
+if 'reindex' in st.session_state and st.session_state['reindex']:
+    st.session_state['reindex'] = False
+    st.rerun()
+
+# Ensure chat history is always initialized
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+# Try to load the index and embedding model
+index = None
+query_engine = None
+try:
+    storage_context = StorageContext.from_defaults(persist_dir="./storage")
+    embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    index = load_index_from_storage(storage_context, embed_model=embed_model)
+    cohere_api_key = os.getenv("COHERE_API_KEY") or "YOUR_COHERE_API_KEY"
+    llm = Cohere(api_key=cohere_api_key)
+    query_engine = index.as_query_engine(llm=llm)  # <-- Explicitly set Cohere LLM here
+except Exception as e:
+    st.warning(f"Could not load index or embedding model: {e}")
+
+# Always show the input box
+with st.form("qna_form", clear_on_submit=True):
+    user_question = st.text_input("❓ Ask your docs:")
+    submitted = st.form_submit_button("Get Answer")
+
+if submitted and user_question:
+    if query_engine is not None:
+        try:
+            response = query_engine.query(user_question)
+        except Exception as e:
+            response = f"Error during QnA: {e}"
+    else:
+        response = "QnA engine is not available. Please upload and index documents first."
+    st.session_state.chat_history.append((user_question, str(response)))
+
+# Display chat history as dark chat bubbles
+if st.session_state.chat_history:
+    st.markdown("---")
+    for q, a in reversed(st.session_state.chat_history):
+        st.markdown(
+            f'<div style="background:#232946;color:#eebbc3;padding:10px 16px;border-radius:18px 18px 4px 18px;margin-bottom:8px;max-width:80%;margin-left:auto;margin-right:0;font-size:1rem;">You: {q}</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f'<div style="background:#121629;color:#fffffe;padding:10px 16px;border-radius:18px 18px 18px 4px;margin-bottom:8px;max-width:80%;margin-right:auto;margin-left:0;font-size:1rem;">Bot: {a}</div>',
+            unsafe_allow_html=True,
+        )
